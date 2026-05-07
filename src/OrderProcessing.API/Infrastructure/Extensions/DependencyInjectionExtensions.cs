@@ -12,6 +12,7 @@ using OrderProcessing.API.Infrastructure.RabbitMq;
 using OrderProcessing.API.Infrastructure.Persistence;
 using OrderProcessing.API.Infrastructure.Persistence.Repositories;
 using OrderProcessing.API.Mapping;
+using RabbitMQ.Client;
 
 namespace OrderProcessing.API.Infrastructure.Extensions;
 
@@ -65,6 +66,8 @@ public static class DependencyInjectionExtensions
             x.UsingRabbitMq((context, cfg) =>
             {
                 var rabbitMqOptions = context.GetRequiredService<IOptions<RabbitMqOptions>>().Value;
+                var deadLetterExchange = $"{rabbitMqOptions.QueueName}.dlx";
+                var deadLetterQueue = $"{rabbitMqOptions.QueueName}.dlq";
 
                 var virtualHost = rabbitMqOptions.VirtualHost.TrimStart('/');
                 var hostUri = string.IsNullOrWhiteSpace(virtualHost)
@@ -81,6 +84,8 @@ public static class DependencyInjectionExtensions
                 {
                     e.PrefetchCount = 16;
                     e.ConcurrentMessageLimit = 8;
+                    e.SetQueueArgument("x-dead-letter-exchange", deadLetterExchange);
+                    e.SetQueueArgument("x-dead-letter-routing-key", deadLetterQueue);
 
                     e.UseMessageRetry(r =>
                     {
@@ -88,6 +93,16 @@ public static class DependencyInjectionExtensions
                     });
 
                     e.ConfigureConsumer<ProcessOrderConsumer>(context);
+                });
+
+                cfg.ReceiveEndpoint(deadLetterQueue, e =>
+                {
+                    e.ConfigureConsumeTopology = false;
+                    e.Bind(deadLetterExchange, bind =>
+                    {
+                        bind.RoutingKey = deadLetterQueue;
+                        bind.ExchangeType = ExchangeType.Direct;
+                    });
                 });
             });
         });

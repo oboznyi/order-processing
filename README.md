@@ -167,6 +167,7 @@ Open `http://localhost:9090` and execute queries:
 ## Design Decisions
 
 - **RabbitMQ + MassTransit**: selected for clear async processing semantics, good .NET integration, and built-in retry/consumer patterns.
+- **Dead-letter queue (DLQ)**: after retry attempts are exhausted, failed messages are moved to a dedicated DLQ (`{QueueName}.dlq`) via a dead-letter exchange (`{QueueName}.dlx`) for safe inspection and replay.
 - **PostgreSQL + EF Core**: simple relational persistence with migrations and transactional consistency.
 - **Single project with folder-based architecture**: application layers are separated by folders (`Domain`, `Application`, `Infrastructure`, `Controllers`) instead of multiple `.csproj` files to keep this test task simple to run, navigate, and review.
 - **Outbox pattern**: prevents losing events between DB commit and publish.
@@ -191,6 +192,7 @@ Open `http://localhost:9090` and execute queries:
 ## Operational Notes
 
 - RabbitMQ settings: `RabbitMq` section.
+- Failed messages are routed to `${RabbitMq:QueueName}.dlq` (for example, `order-processing-queue.dlq`) after retry policy is exhausted.
 - PostgreSQL connection: `ConnectionStrings:Postgres`.
 - Outbox cleanup settings: `OutboxCleanup` section.
 - Prometheus scrape config: `prometheus.yml` at repository root.
